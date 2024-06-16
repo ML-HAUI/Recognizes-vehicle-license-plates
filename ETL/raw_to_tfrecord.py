@@ -1,10 +1,10 @@
 import sys
-import boto3
+import boto3 # type: ignore
 import zipfile
 import io
 from PIL import Image
 import tensorflow as tf
-from awsglue.utils import getResolvedOptions
+from awsglue.utils import getResolvedOptions # type: ignore
 import logging
 
 # Set up basic logging
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Parse job parameters
 try:
-    args = getResolvedOptions(sys.argv, ['bucket_name', 'zip_key', 'output_prefix'])
+    args = getResolvedOptions(sys.argv, ['source_bucket', 'zip_key', 'target_bucket', 'output_prefix'])
 except Exception as e:
     logger.error("Error parsing arguments: %s", e)
     sys.exit(2)
@@ -53,12 +53,12 @@ def image_to_tfrecord(img, bboxes):
     example = tf.train.Example(features=tf.train.Features(feature=feature))
     return example.SerializeToString()
 
-def process_images_to_tfrecord(bucket_name, zip_key, output_prefix):
+def process_images_to_tfrecord(source_bucket, zip_key, target_bucket, output_prefix):
     try:
         s3 = boto3.client('s3')
 
         # Download the zip file
-        zip_obj = s3.get_object(Bucket=bucket_name, Key=zip_key)
+        zip_obj = s3.get_object(Bucket=source_bucket, Key=zip_key)
         buffer = io.BytesIO(zip_obj["Body"].read())
 
         tfrecord_filename = '/tmp/data.tfrecord'
@@ -104,21 +104,22 @@ def process_images_to_tfrecord(bucket_name, zip_key, output_prefix):
                             writer.write(tfrecord)
 
         # Upload TFRecord file to S3
-        s3.upload_file(tfrecord_filename, bucket_name, f'{output_prefix}/data.tfrecord')
+        s3.upload_file(tfrecord_filename, target_bucket, f'{output_prefix}/data.tfrecord')
     except Exception as e:
         logger.error("Error processing images: %s", e)
         sys.exit(2)
 
 def main():
-    if not all(k in args for k in ('bucket_name', 'zip_key', 'output_prefix')):
-        logger.error("Missing required arguments: --bucket_name, --zip_key, --output_prefix")
+    if not all(k in args for k in ('source_bucket', 'zip_key', 'target_bucket', 'output_prefix')):
+        logger.error("Missing required arguments: --source_bucket, --zip_key, --target_bucket, --output_prefix")
         sys.exit(2)
         
-    bucket_name = args['bucket_name']
+    source_bucket = args['source_bucket']
     zip_key = args['zip_key']
+    target_bucket = args['target_bucket']
     output_prefix = args['output_prefix']
     
-    process_images_to_tfrecord(bucket_name, zip_key, output_prefix)
+    process_images_to_tfrecord(source_bucket, zip_key, target_bucket, output_prefix)
 
 if __name__ == "__main__":
     main()
